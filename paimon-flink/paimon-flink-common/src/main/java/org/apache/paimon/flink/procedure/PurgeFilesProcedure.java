@@ -37,7 +37,7 @@ import java.util.Arrays;
  * A procedure to purge files for a table. Usage:
  *
  * <pre><code>
- *  -- rollback to the snapshot which earlier or equal than watermark.
+ *  -- clear table with purge files directly.
  *  CALL sys.purge_files(`table` => 'tableId')
  * </code></pre>
  */
