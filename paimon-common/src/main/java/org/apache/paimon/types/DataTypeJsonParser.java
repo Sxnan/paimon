@@ -58,7 +58,12 @@ public final class DataTypeJsonParser {
         if (descriptionNode != null) {
             description = descriptionNode.asText();
         }
-        return new DataField(id, name, type, description);
+        JsonNode columnGroupIdNode = json.get("columnGroupId");
+        int columnGroupId = -1;
+        if (columnGroupIdNode != null) {
+            columnGroupId = columnGroupIdNode.asInt();
+        }
+        return new DataField(id, name, type, description, columnGroupId);
     }
 
     public static DataType parseDataType(JsonNode json) {

@@ -53,15 +53,23 @@ public final class DataField implements Serializable {
 
     private final @Nullable String description;
 
+    private final int columnGroupId;
+
     public DataField(int id, String name, DataType dataType) {
-        this(id, name, dataType, null);
+        this(id, name, dataType, null, -1);
     }
 
     public DataField(int id, String name, DataType type, @Nullable String description) {
+        this(id, name, type, description, -1);
+    }
+
+    public DataField(
+            int id, String name, DataType type, @Nullable String description, int columnGroupId) {
         this.id = id;
         this.name = name;
         this.type = type;
         this.description = description;
+        this.columnGroupId = columnGroupId;
     }
 
     public int id() {
@@ -77,19 +85,23 @@ public final class DataField implements Serializable {
     }
 
     public DataField newId(int newid) {
-        return new DataField(newid, name, type, description);
+        return new DataField(newid, name, type, description, columnGroupId);
     }
 
     public DataField newName(String newName) {
-        return new DataField(id, newName, type, description);
+        return new DataField(id, newName, type, description, columnGroupId);
     }
 
     public DataField newType(DataType newType) {
-        return new DataField(id, name, newType, description);
+        return new DataField(id, name, newType, description, columnGroupId);
     }
 
     public DataField newDescription(String newDescription) {
-        return new DataField(id, name, type, newDescription);
+        return new DataField(id, name, type, newDescription, columnGroupId);
+    }
+
+    public DataField newColumnGroupId(int columnGroupId) {
+        return new DataField(id, name, type, description, columnGroupId);
     }
 
     @Nullable
@@ -102,7 +114,7 @@ public final class DataField implements Serializable {
     }
 
     public DataField copy(boolean isNullable) {
-        return new DataField(id, name, type.copy(isNullable), description);
+        return new DataField(id, name, type.copy(isNullable), description, columnGroupId);
     }
 
     public String asSQLString() {
@@ -130,6 +142,7 @@ public final class DataField implements Serializable {
         if (description() != null) {
             generator.writeStringField("description", description());
         }
+        generator.writeNumberField("columnGroupId", getColumnGroupId());
         generator.writeEndObject();
     }
 
@@ -145,7 +158,8 @@ public final class DataField implements Serializable {
         return Objects.equals(id, field.id)
                 && Objects.equals(name, field.name)
                 && Objects.equals(type, field.type)
-                && Objects.equals(description, field.description);
+                && Objects.equals(description, field.description)
+                && Objects.equals(columnGroupId, field.columnGroupId);
     }
 
     public boolean equalsIgnoreFieldId(DataField other) {
@@ -175,7 +189,7 @@ public final class DataField implements Serializable {
 
     @Override
     public int hashCode() {
-        return Objects.hash(id, name, type, description);
+        return Objects.hash(id, name, type, description, columnGroupId);
     }
 
     @Override
@@ -197,5 +211,9 @@ public final class DataField implements Serializable {
         } else {
             return false;
         }
+    }
+
+    public int getColumnGroupId() {
+        return columnGroupId;
     }
 }

@@ -191,6 +191,11 @@ public class TableSchema implements Serializable {
         return bucketKeys;
     }
 
+    public int getColumnGroupNum() {
+        return fields.stream().map(DataField::getColumnGroupId).max(Integer::compareTo).orElse(-1)
+                + 1;
+    }
+
     public boolean crossPartitionUpdate() {
         if (primaryKeys.isEmpty() || partitionKeys.isEmpty()) {
             return false;
