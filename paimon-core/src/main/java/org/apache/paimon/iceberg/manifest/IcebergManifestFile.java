@@ -32,6 +32,7 @@ import org.apache.paimon.iceberg.IcebergPathFactory;
 import org.apache.paimon.iceberg.manifest.IcebergManifestFileMeta.Content;
 import org.apache.paimon.iceberg.metadata.IcebergPartitionSpec;
 import org.apache.paimon.io.RollingFileWriter;
+import org.apache.paimon.io.AbstractSingleFileWriter;
 import org.apache.paimon.io.SingleFileWriter;
 import org.apache.paimon.manifest.ManifestEntry;
 import org.apache.paimon.options.MemorySize;
@@ -180,7 +181,7 @@ public class IcebergManifestFile extends ObjectsFile<IcebergManifestEntry> {
     }
 
     private class IcebergManifestEntryWriter
-            extends SingleFileWriter<IcebergManifestEntry, IcebergManifestFileMeta> {
+            extends AbstractSingleFileWriter<IcebergManifestEntry, IcebergManifestFileMeta> {
 
         private final SimpleStatsCollector partitionStatsCollector;
         private final long sequenceNumber;
