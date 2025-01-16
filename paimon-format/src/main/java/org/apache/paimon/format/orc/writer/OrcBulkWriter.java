@@ -76,6 +76,11 @@ public class OrcBulkWriter implements FormatWriter {
         return rowBatch.size == 0 && length() >= targetSize;
     }
 
+    @Override
+    public long getEstimatedDataSize() throws IOException {
+        return length();
+    }
+
     private long length() throws IOException {
         long estimateMemory = writer.estimateMemory();
         long fileLength = underlyingStream.getPos();

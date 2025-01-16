@@ -114,6 +114,11 @@ public class KeyValue {
         return new RowType(createKeyValueFields(keyType.getFields(), valueType.getFields()));
     }
 
+    public static RowType schema(int columnGroupId, RowType keyType, RowType valueType) {
+        return new RowType(
+                createKeyValueFields(columnGroupId, keyType.getFields(), valueType.getFields()));
+    }
+
     public static RowType schemaWithLevel(RowType keyType, RowType valueType) {
         List<DataField> fields = new ArrayList<>(schema(keyType, valueType).getFields());
         fields.add(LEVEL);
@@ -131,9 +136,33 @@ public class KeyValue {
             List<DataField> keyFields, List<DataField> valueFields) {
         List<DataField> fields = new ArrayList<>(keyFields.size() + valueFields.size() + 2);
         fields.addAll(keyFields);
-        fields.add(SEQUENCE_NUMBER);
-        fields.add(VALUE_KIND);
+        fields.add(SEQUENCE_NUMBER.newColumnGroupId(0));
+        fields.add(VALUE_KIND.newColumnGroupId(0));
         fields.addAll(valueFields);
+        return fields;
+    }
+
+    /**
+     * Create key-value fields.
+     *
+     * @param keyFields the key fields
+     * @param valueFields the value fields
+     * @return the table fields
+     */
+    public static List<DataField> createKeyValueFields(
+            int columnGroupId, List<DataField> keyFields, List<DataField> valueFields) {
+        List<DataField> fields = new ArrayList<>(keyFields.size() + valueFields.size() + 2);
+        if (columnGroupId == 0) {
+            fields.addAll(keyFields);
+            fields.add(SEQUENCE_NUMBER.newColumnGroupId(0));
+            fields.add(VALUE_KIND.newColumnGroupId(0));
+        } else {
+            for (DataField valueField : valueFields) {
+                if (valueField.getColumnGroupId() == columnGroupId) {
+                    fields.add(valueField);
+                }
+            }
+        }
         return fields;
     }
 

@@ -49,4 +49,6 @@ public interface FormatWriter extends Closeable {
      * @throws IOException Thrown if calculating the length fails.
      */
     boolean reachTargetSize(boolean suggestedCheck, long targetSize) throws IOException;
+
+    long getEstimatedDataSize() throws IOException;
 }

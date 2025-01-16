@@ -167,7 +167,8 @@ public class KeyValueFileStoreWrite extends MemoryFileStoreWrite<KeyValue> {
                         valueType,
                         options.fileFormat(),
                         format2PathFactory,
-                        options.targetFileSize(true));
+                        options.targetFileSize(true),
+                        schema);
         this.keyComparatorSupplier = keyComparatorSupplier;
         this.logDedupEqualSupplier = logDedupEqualSupplier;
         this.mfFactory = mfFactory;

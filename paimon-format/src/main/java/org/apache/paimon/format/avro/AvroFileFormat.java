@@ -154,6 +154,11 @@ public class AvroFileFormat extends FileFormat {
                     }
                     throw new IOException("Failed to get stream length: no open stream");
                 }
+
+                @Override
+                public long getEstimatedDataSize() throws IOException {
+                    return out.getPos();
+                }
             };
         }
     }
