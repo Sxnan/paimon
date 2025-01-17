@@ -259,7 +259,7 @@ public class MyTest {
                         .column("k", DataTypes.INT(), null, 1)
                         .column("v", DataTypes.STRING(), null, 2)
                         .primaryKey("k")
-                        .option("target-file-size", "16B")
+                        //                        .option("target-file-size", "16B")
 //                        .option("write-buffer-size", "256 kb")
                         .option("num-sorted-run.compaction-trigger", "10000")
                         .build();
@@ -282,21 +282,22 @@ public class MyTest {
             commiter.commit(0, write.prepareCommit(true, 0));
         }
 
-//        ReadBuilder readBuilder = table.newReadBuilder();
-//        TableScan.Plan plan = readBuilder.newScan().plan();
-//        try (RecordReader<InternalRow> reader = readBuilder.newRead().createReader(plan)) {
-//            RecordReader.RecordIterator<InternalRow> iter = reader.readBatch();
-//
-//            while (iter != null) {
-//                InternalRow row = iter.next();
-//                if (row == null) {
-//                    iter.releaseBatch();
-//                    iter = reader.readBatch();
-//                    continue;
-//                }
-//                System.out.printf("%d, %s\n", row.getInt(0), row.getString(1));
-//            }
-//        }
+        //        ReadBuilder readBuilder = table.newReadBuilder();
+        //        TableScan.Plan plan = readBuilder.newScan().plan();
+        //        try (RecordReader<InternalRow> reader = readBuilder.newRead().createReader(plan))
+        // {
+        //            RecordReader.RecordIterator<InternalRow> iter = reader.readBatch();
+        //
+        //            while (iter != null) {
+        //                InternalRow row = iter.next();
+        //                if (row == null) {
+        //                    iter.releaseBatch();
+        //                    iter = reader.readBatch();
+        //                    continue;
+        //                }
+        //                System.out.printf("%d, %s\n", row.getInt(0), row.getString(1));
+        //            }
+        //        }
     }
 
     @Test
@@ -309,7 +310,7 @@ public class MyTest {
                         getTablePath(tableName),
                         schemaManager.latest().orElseThrow(RuntimeException::new));
 
-        ReadBuilder readBuilder = table.newReadBuilder();
+        ReadBuilder readBuilder = table.newReadBuilder().withReadType(table.rowType().project("k"));
         TableScan.Plan batchPlan = readBuilder.newScan().plan();
         TableScan.Plan streamPlan = readBuilder.newStreamScan().plan();
         try (RecordReader<InternalRow> reader = readBuilder.newRead().createReader(batchPlan)) {
@@ -322,7 +323,8 @@ public class MyTest {
                     iter = reader.readBatch();
                     continue;
                 }
-                System.out.printf("%d, %s\n", row.getInt(0), row.getString(1));
+                //                System.out.printf("%d, %s\n", row.getInt(0), row.getString(1));
+                System.out.printf("%d\n", row.getInt(0));
             }
         }
     }

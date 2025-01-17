@@ -53,6 +53,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 /** Factory to create {@link RecordReader}s for reading {@link KeyValue} files. */
 public class KeyValueFileReaderFactory implements FileReaderFactory<KeyValue> {
@@ -69,6 +70,9 @@ public class KeyValueFileReaderFactory implements FileReaderFactory<KeyValue> {
 
     private final Map<FormatKey, FormatReaderMapping> formatReaderMappings;
     private final BinaryRow partition;
+    private final FileFormatDiscover formatDiscover;
+    private final List<Predicate> filters;
+    private final KeyValueFieldsExtractor extractor;
     private final DeletionVector.Factory dvFactory;
 
     private KeyValueFileReaderFactory(
@@ -81,7 +85,10 @@ public class KeyValueFileReaderFactory implements FileReaderFactory<KeyValue> {
             DataFilePathFactory pathFactory,
             long asyncThreshold,
             BinaryRow partition,
-            DeletionVector.Factory dvFactory) {
+            DeletionVector.Factory dvFactory,
+            FileFormatDiscover formatDiscover,
+            List<Predicate> filters,
+            KeyValueFieldsExtractor extractor) {
         this.fileIO = fileIO;
         this.schemaManager = schemaManager;
         this.schema = schema;
@@ -91,6 +98,9 @@ public class KeyValueFileReaderFactory implements FileReaderFactory<KeyValue> {
         this.pathFactory = pathFactory;
         this.asyncThreshold = asyncThreshold;
         this.partition = partition;
+        this.formatDiscover = formatDiscover;
+        this.filters = filters;
+        this.extractor = extractor;
         this.formatReaderMappings = new HashMap<>();
         this.dvFactory = dvFactory;
     }
@@ -125,16 +135,62 @@ public class KeyValueFileReaderFactory implements FileReaderFactory<KeyValue> {
         Path filePath = pathFactory.toPath(file);
 
         long fileSize = file.fileSize();
-        FileRecordReader<InternalRow> fileRecordReader =
-                new DataFileRecordReader(
-                        formatReaderMapping.getReaderFactory(),
-                        orcPoolSize == null
-                                ? new FormatReaderContext(fileIO, filePath, fileSize)
-                                : new OrcFormatReaderContext(
-                                        fileIO, filePath, fileSize, orcPoolSize),
-                        formatReaderMapping.getIndexMapping(),
-                        formatReaderMapping.getCastMapping(),
-                        PartitionUtils.create(formatReaderMapping.getPartitionPair(), partition));
+        FileRecordReader<InternalRow> fileRecordReader;
+        if (schema.getColumnGroupNum() > 0) {
+            fileRecordReader =
+                    new ColumnGroupDataFileRecordReader(
+                            (columnGroupId, readTableFields, path) -> {
+                                FormatReaderContext context =
+                                        new FormatReaderContext(
+                                                fileIO, path, fileIO.getFileSize(path));
+                                FormatReaderMapping.Builder bulkFormatMappingBuilder =
+                                        new FormatReaderMapping.Builder(
+                                                formatDiscover,
+                                                readTableFields,
+                                                (schema) ->
+                                                        KeyValue.createKeyValueFields(
+                                                                columnGroupId,
+                                                                extractor.keyFields(schema).stream()
+                                                                        .map(
+                                                                                k ->
+                                                                                        k
+                                                                                                .newColumnGroupId(
+                                                                                                        0))
+                                                                        .collect(
+                                                                                Collectors
+                                                                                        .toList()),
+                                                                extractor.valueFields(schema)),
+                                                filters);
+                                return bulkFormatMappingBuilder
+                                        .build(
+                                                formatIdentifier,
+                                                schema,
+                                                schemaId == schema.id()
+                                                        ? schema
+                                                        : schemaManager.schema(schemaId))
+                                        .getReaderFactory()
+                                        .createReader(context);
+                            },
+                            filePath,
+                            schema.getColumnGroupNum(),
+                            formatReaderMapping.getReadRowType().getFields(),
+                            formatReaderMapping.getIndexMapping(),
+                            formatReaderMapping.getCastMapping(),
+                            PartitionUtils.create(
+                                    formatReaderMapping.getPartitionPair(), partition));
+        } else {
+            fileRecordReader =
+                    new DataFileRecordReader(
+                            formatReaderMapping.getReaderFactory(),
+                            orcPoolSize == null
+                                    ? new FormatReaderContext(fileIO, filePath, fileSize)
+                                    : new OrcFormatReaderContext(
+                                            fileIO, filePath, fileSize, orcPoolSize),
+                            formatReaderMapping.getIndexMapping(),
+                            formatReaderMapping.getCastMapping(),
+                            PartitionUtils.create(
+                                    formatReaderMapping.getPartitionPair(), partition));
+        }
 
         Optional<DeletionVector> deletionVector = dvFactory.create(file.fileName());
         if (deletionVector.isPresent() && !deletionVector.get().isEmpty()) {
@@ -271,7 +327,10 @@ public class KeyValueFileReaderFactory implements FileReaderFactory<KeyValue> {
                     pathFactory.createDataFilePathFactory(partition, bucket),
                     options.fileReaderAsyncThreshold().getBytes(),
                     partition,
-                    dvFactory);
+                    dvFactory,
+                    formatDiscover,
+                    filters,
+                    extractor);
         }
 
         public FileIO fileIO() {

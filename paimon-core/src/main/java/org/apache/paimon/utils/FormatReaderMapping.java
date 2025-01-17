@@ -59,6 +59,7 @@ public class FormatReaderMapping {
     private final FormatReaderFactory readerFactory;
     private final TableSchema dataSchema;
     private final List<Predicate> dataFilters;
+    private final RowType readRowType;
 
     public FormatReaderMapping(
             @Nullable int[] indexMapping,
@@ -67,7 +68,9 @@ public class FormatReaderMapping {
             @Nullable Pair<int[], RowType> partitionPair,
             FormatReaderFactory readerFactory,
             TableSchema dataSchema,
-            List<Predicate> dataFilters) {
+            List<Predicate> dataFilters,
+            RowType readRowType) {
+        this.readRowType = readRowType;
         this.indexMapping = combine(indexMapping, trimmedKeyMapping);
         this.castMapping = castMapping;
         this.readerFactory = readerFactory;
@@ -121,6 +124,10 @@ public class FormatReaderMapping {
 
     public List<Predicate> getDataFilters() {
         return dataFilters;
+    }
+
+    public RowType getReadRowType() {
+        return readRowType;
     }
 
     /** Builder for {@link FormatReaderMapping}. */
@@ -196,7 +203,8 @@ public class FormatReaderMapping {
                             .discover(formatIdentifier)
                             .createReaderFactory(readRowType, readFilters),
                     dataSchema,
-                    readFilters);
+                    readFilters,
+                    readRowType);
         }
 
         static Pair<int[], RowType> trimKeyFields(
@@ -229,7 +237,8 @@ public class FormatReaderMapping {
                         trimmedFields.add(keyField ? f : field);
                     }
                 } else {
-                    throw new RuntimeException("Can't find field with id: " + id + " in fields.");
+//                    throw new RuntimeException("Can't find field with id: " + id + " in fields.");
+                    trimmedFields.add(field);
                 }
             }
 

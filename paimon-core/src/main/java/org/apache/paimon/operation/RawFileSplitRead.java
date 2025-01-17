@@ -31,6 +31,7 @@ import org.apache.paimon.format.FileFormatDiscover;
 import org.apache.paimon.format.FormatKey;
 import org.apache.paimon.format.FormatReaderContext;
 import org.apache.paimon.fs.FileIO;
+import org.apache.paimon.io.ColumnGroupDataFileRecordReader;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.io.DataFilePathFactory;
 import org.apache.paimon.io.DataFileRecordReader;
@@ -60,10 +61,12 @@ import javax.annotation.Nullable;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 import static org.apache.paimon.predicate.PredicateBuilder.splitAnd;
 
@@ -147,6 +150,9 @@ public class RawFileSplitRead implements SplitRead<InternalRow> {
             List<DataFileMeta> files,
             @Nullable List<IOExceptionSupplier<DeletionVector>> dvFactories)
             throws IOException {
+        if (schema.getColumnGroupNum() > 0) {
+            return createColumnGroupReader(partition, bucket, files, dvFactories);
+        }
         DataFilePathFactory dataFilePathFactory =
                 pathFactory.createDataFilePathFactory(partition, bucket);
         List<ReaderSupplier<InternalRow>> suppliers = new ArrayList<>();
@@ -187,6 +193,146 @@ public class RawFileSplitRead implements SplitRead<InternalRow> {
         }
 
         return ConcatRecordReader.create(suppliers);
+    }
+
+    private RecordReader<InternalRow> createColumnGroupReader(
+            BinaryRow partition,
+            int bucket,
+            List<DataFileMeta> files,
+            List<IOExceptionSupplier<DeletionVector>> dvFactories)
+            throws IOException {
+        DataFilePathFactory dataFilePathFactory =
+                pathFactory.createDataFilePathFactory(partition, bucket);
+        List<ReaderSupplier<InternalRow>> suppliers = new ArrayList<>();
+
+        List<DataField> readTableFields = readRowType.getFields();
+        FormatReaderMapping.Builder bulkFormatMappingBuilder =
+                new FormatReaderMapping.Builder(
+                        formatDiscover, readTableFields, TableSchema::fields, filters);
+
+        for (int i = 0; i < files.size(); i++) {
+            DataFileMeta file = files.get(i);
+            String formatIdentifier = DataFilePathFactory.formatIdentifier(file.fileName());
+            long schemaId = file.schemaId();
+
+            Supplier<FormatReaderMapping> formatSupplier =
+                    () ->
+                            bulkFormatMappingBuilder.build(
+                                    formatIdentifier,
+                                    schema,
+                                    schemaId == schema.id()
+                                            ? schema
+                                            : schemaManager.schema(schemaId));
+
+            FormatReaderMapping bulkFormatMapping = formatSupplier.get();
+
+            IOExceptionSupplier<DeletionVector> dvFactory =
+                    dvFactories == null ? null : dvFactories.get(i);
+            suppliers.add(
+                    () ->
+                            createColumnGroupFileReader(
+                                    partition,
+                                    file,
+                                    dataFilePathFactory,
+                                    dvFactory,
+                                    formatIdentifier,
+                                    schema,
+                                    schemaId,
+                                    bulkFormatMapping));
+        }
+
+        return ConcatRecordReader.create(suppliers);
+    }
+
+    private FileRecordReader<InternalRow> createColumnGroupFileReader(
+            BinaryRow partition,
+            DataFileMeta file,
+            DataFilePathFactory dataFilePathFactory,
+            IOExceptionSupplier<DeletionVector> dvFactory,
+            String formatIdentifier,
+            TableSchema schema,
+            long schemaId,
+            FormatReaderMapping formatReaderMapping)
+            throws IOException {
+        FileIndexResult fileIndexResult = null;
+        if (fileIndexReadEnabled) {
+            fileIndexResult =
+                    FileIndexEvaluator.evaluate(
+                            fileIO,
+                            formatReaderMapping.getDataSchema(),
+                            formatReaderMapping.getDataFilters(),
+                            dataFilePathFactory,
+                            file);
+            if (!fileIndexResult.remain()) {
+                return new EmptyFileRecordReader<>();
+            }
+        }
+
+        RoaringBitmap32 selection = null;
+        if (fileIndexResult instanceof BitmapIndexResult) {
+            selection = ((BitmapIndexResult) fileIndexResult).get();
+        }
+
+        RoaringBitmap32 deletion = null;
+        DeletionVector deletionVector = dvFactory == null ? null : dvFactory.get();
+        if (deletionVector instanceof BitmapDeletionVector) {
+            deletion = ((BitmapDeletionVector) deletionVector).get();
+        }
+
+        if (selection != null) {
+            if (deletion != null) {
+                selection = RoaringBitmap32.andNot(selection, deletion);
+            }
+            if (selection.isEmpty()) {
+                return new EmptyFileRecordReader<>();
+            }
+        }
+
+        RoaringBitmap32 finalSelection = selection;
+
+        FormatReaderContext formatReaderContext =
+                new FormatReaderContext(
+                        fileIO, dataFilePathFactory.toPath(file), file.fileSize(), selection);
+        FileRecordReader<InternalRow> fileRecordReader;
+        fileRecordReader =
+                new ColumnGroupDataFileRecordReader(
+                        (columnGroupId, readTableFields, path) -> {
+                            FormatReaderContext context =
+                                    new FormatReaderContext(
+                                            fileIO, path, fileIO.getFileSize(path), finalSelection);
+                            FormatReaderMapping.Builder bulkFormatMappingBuilder =
+                                    new FormatReaderMapping.Builder(
+                                            formatDiscover,
+                                            readTableFields,
+                                            TableSchema::fields,
+                                            filters);
+                            return bulkFormatMappingBuilder
+                                    .build(
+                                            formatIdentifier,
+                                            schema,
+                                            schemaId == schema.id()
+                                                    ? schema
+                                                    : schemaManager.schema(schemaId))
+                                    .getReaderFactory()
+                                    .createReader(context);
+                        },
+                        formatReaderContext.filePath(),
+                        this.schema.getColumnGroupNum(),
+                        this.schema.fields(),
+                        formatReaderMapping.getIndexMapping(),
+                        formatReaderMapping.getCastMapping(),
+                        PartitionUtils.create(formatReaderMapping.getPartitionPair(), partition));
+
+        if (fileIndexResult instanceof BitmapIndexResult) {
+            fileRecordReader =
+                    new ApplyBitmapIndexRecordReader(
+                            fileRecordReader, (BitmapIndexResult) fileIndexResult);
+        }
+
+        if (deletionVector != null && !deletionVector.isEmpty()) {
+            return new ApplyDeletionVectorReader(fileRecordReader, deletionVector);
+        }
+        return fileRecordReader;
     }
 
     private FileRecordReader<InternalRow> createFileReader(
