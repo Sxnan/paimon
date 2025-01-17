@@ -318,7 +318,7 @@ public class RawFileSplitRead implements SplitRead<InternalRow> {
                         },
                         formatReaderContext.filePath(),
                         this.schema.getColumnGroupNum(),
-                        this.schema.fields(),
+                        formatReaderMapping.getReadRowType().getFields(),
                         formatReaderMapping.getIndexMapping(),
                         formatReaderMapping.getCastMapping(),
                         PartitionUtils.create(formatReaderMapping.getPartitionPair(), partition));

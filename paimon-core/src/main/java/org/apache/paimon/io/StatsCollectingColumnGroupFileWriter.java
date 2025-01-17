@@ -229,7 +229,7 @@ public class StatsCollectingColumnGroupFileWriter
         SimpleStats keyStats = keyStatsConverter.toBinaryAllMode(keyFieldStats);
 
         SimpleColStats[] valFieldStats =
-                Arrays.copyOfRange(rowStats, numKeyFields + 2, rowStats.length);
+                Arrays.copyOfRange(rowStats, numKeyFields, rowStats.length);
 
         Pair<List<String>, SimpleStats> valueStatsPair =
                 valueStatsConverter.toBinary(valFieldStats);
@@ -279,12 +279,30 @@ public class StatsCollectingColumnGroupFileWriter
         Preconditions.checkState(closed, "Cannot access metric unless the writer is closed.");
 
         if (simpleStatsExtractor != null) {
-            List<SimpleColStats> colStats = new ArrayList<>();
+            List<SimpleColStats[]> colStatsPerColumnGroup = new ArrayList<>();
             for (int i = 0; i < writers.length; i++) {
                 SimpleStatsExtractor statsExtractor = columnGroupWriterContext.getStatsExtractor(i);
-                colStats.addAll(Arrays.asList(statsExtractor.extract(fileIO, writers[i].path)));
+                colStatsPerColumnGroup.add(statsExtractor.extract(fileIO, writers[i].path));
             }
-            return colStats.toArray(new SimpleColStats[0]);
+
+            int numCol = keyType.getFields().size() + valueType.getFields().size();
+            SimpleColStats[] colStats = new SimpleColStats[numCol];
+            int[] columnGroupIdx = new int[getNumColumnGroup(schema)];
+            Arrays.fill(columnGroupIdx, 0);
+            int currentIdx = 0;
+            for (DataField field : keyType.getFields()) {
+                int columnGroupId = field.getColumnGroupId();
+                colStats[currentIdx++] =
+                        colStatsPerColumnGroup.get(columnGroupId)[columnGroupIdx[columnGroupId]++];
+            }
+
+            for (DataField field : valueType.getFields()) {
+                int columnGroupId = field.getColumnGroupId();
+                colStats[currentIdx++] =
+                        colStatsPerColumnGroup.get(columnGroupId)[columnGroupIdx[columnGroupId]++];
+            }
+
+            return colStats;
         } else {
             return simpleStatsCollector.extract();
         }

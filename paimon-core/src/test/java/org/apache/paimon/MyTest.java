@@ -256,12 +256,18 @@ public class MyTest {
     void testColumnGroup() throws Exception {
         Schema schema =
                 Schema.newBuilder()
-                        .column("k", DataTypes.INT(), null, 1)
-                        .column("v", DataTypes.STRING(), null, 2)
+                        .column("k", DataTypes.INT(), null)
+                        .column("v1", DataTypes.STRING(), null)
+                        .column("g1", DataTypes.BIGINT(), null)
+                        .column("v2", DataTypes.DOUBLE(), null)
+                        .column("g2", DataTypes.BIGINT(), null)
                         .primaryKey("k")
                         //                        .option("target-file-size", "16B")
-//                        .option("write-buffer-size", "256 kb")
+                        //                        .option("write-buffer-size", "256 kb")
                         .option("num-sorted-run.compaction-trigger", "10000")
+                        .option("merge-engine", "partial-update")
+                        .option("fields.g1.sequence-group", "v1")
+                        .option("fields.g2.sequence-group", "v2")
                         .build();
 
         String tableName = "column_group";
@@ -277,7 +283,13 @@ public class MyTest {
                 StreamTableCommit commiter = streamWriteBuilder.newCommit()) {
             for (int i = 0; i < 20000; ++i) {
                 write.write(
-                        GenericRow.of(i % 4000, BinaryString.fromString(String.valueOf(i))), i % 2);
+                        GenericRow.of(
+                                i % 4000,
+                                BinaryString.fromString(String.valueOf(i)),
+                                (long) i,
+                                i * 1.0,
+                                (long) i),
+                        i % 2);
             }
             commiter.commit(0, write.prepareCommit(true, 0));
         }
@@ -310,7 +322,8 @@ public class MyTest {
                         getTablePath(tableName),
                         schemaManager.latest().orElseThrow(RuntimeException::new));
 
-        ReadBuilder readBuilder = table.newReadBuilder().withReadType(table.rowType().project("k"));
+        ReadBuilder readBuilder =
+                table.newReadBuilder().withReadType(table.rowType().project("k", "v1", "v2"));
         TableScan.Plan batchPlan = readBuilder.newScan().plan();
         TableScan.Plan streamPlan = readBuilder.newStreamScan().plan();
         try (RecordReader<InternalRow> reader = readBuilder.newRead().createReader(batchPlan)) {
@@ -323,8 +336,9 @@ public class MyTest {
                     iter = reader.readBatch();
                     continue;
                 }
-                //                System.out.printf("%d, %s\n", row.getInt(0), row.getString(1));
-                System.out.printf("%d\n", row.getInt(0));
+                System.out.printf(
+                        "%d, %s, %f\n", row.getInt(0), row.getString(1), row.getDouble(2));
+                //                System.out.printf("%d\n", row.getInt(0));
             }
         }
     }
@@ -333,10 +347,16 @@ public class MyTest {
     void testColumnGroupCompaction() throws Exception {
         Schema schema =
                 Schema.newBuilder()
-                        .column("k", DataTypes.INT(), null, 1)
-                        .column("v", DataTypes.STRING(), null, 2)
+                        .column("k", DataTypes.INT(), null)
+                        .column("v1", DataTypes.STRING(), null)
+                        .column("g1", DataTypes.BIGINT(), null)
+                        .column("v2", DataTypes.DOUBLE(), null)
+                        .column("g2", DataTypes.BIGINT(), null)
                         .primaryKey("k")
                         .option("num-sorted-run.compaction-trigger", "2")
+                        .option("merge-engine", "partial-update")
+                        .option("fields.g1.sequence-group", "v1")
+                        .option("fields.g2.sequence-group", "v2")
                         .build();
 
         String tableName = "column_group_compaction";
@@ -350,15 +370,15 @@ public class MyTest {
 
         try (StreamTableWrite write = streamWriteBuilder.newWrite();
                 StreamTableCommit commiter = streamWriteBuilder.newCommit()) {
-            write.write(GenericRow.of(0, BinaryString.fromString("0")), 0);
-            write.write(GenericRow.of(1, BinaryString.fromString("1")), 0);
+            write.write(GenericRow.of(0, BinaryString.fromString("0"), 0L, null, null), 0);
+            write.write(GenericRow.of(1, BinaryString.fromString("1"), 0L, null, null), 0);
             commiter.commit(0, write.prepareCommit(false, 0));
         }
 
         try (StreamTableWrite write = streamWriteBuilder.newWrite();
                 StreamTableCommit commiter = streamWriteBuilder.newCommit()) {
-            write.write(GenericRow.of(0, BinaryString.fromString("00")), 0);
-            write.write(GenericRow.of(2, BinaryString.fromString("22")), 0);
+            write.write(GenericRow.of(0, BinaryString.fromString("00"), 1L, null, null), 0);
+            write.write(GenericRow.of(2, BinaryString.fromString("22"), 1L, null, null), 0);
             commiter.commit(1, write.prepareCommit(true, 1));
         }
     }

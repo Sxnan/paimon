@@ -191,6 +191,7 @@ public class KeyValueFileWriterFactory {
 
     private StatsCollectingColumnGroupFileWriter createDataFileWriterForColumnGroup(
             Path path, int level, FileSource fileSource) {
+        RowType keyType = new RowType(this.keyType.getFields().stream().map(f -> f.newColumnGroupId(0)).collect(Collectors.toList()));
         KeyValueSerializer kvSerializer = new KeyValueSerializer(keyType, valueType);
 
         return new StatsCollectingColumnGroupFileWriter(

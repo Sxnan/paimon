@@ -63,8 +63,7 @@ public final class DataField implements Serializable {
         this(id, name, type, description, -1);
     }
 
-    public DataField(
-            int id, String name, DataType type, @Nullable String description, int columnGroupId) {
+    DataField(int id, String name, DataType type, @Nullable String description, int columnGroupId) {
         this.id = id;
         this.name = name;
         this.type = type;

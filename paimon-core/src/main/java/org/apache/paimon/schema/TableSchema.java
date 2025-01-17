@@ -21,11 +21,14 @@ package org.apache.paimon.schema;
 import org.apache.paimon.CoreOptions;
 import org.apache.paimon.fs.FileIO;
 import org.apache.paimon.fs.Path;
+import org.apache.paimon.options.Options;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.RowType;
+import org.apache.paimon.utils.FieldsComparator;
 import org.apache.paimon.utils.JsonSerdeUtil;
 import org.apache.paimon.utils.Preconditions;
 import org.apache.paimon.utils.StringUtils;
+import org.apache.paimon.utils.UserDefinedSeqComparator;
 
 import javax.annotation.Nullable;
 
@@ -33,15 +36,22 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.Serializable;
 import java.io.UncheckedIOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import static org.apache.paimon.CoreOptions.BUCKET_KEY;
+import static org.apache.paimon.CoreOptions.FIELDS_PREFIX;
+import static org.apache.paimon.CoreOptions.FIELDS_SEPARATOR;
+import static org.apache.paimon.CoreOptions.MERGE_ENGINE;
+import static org.apache.paimon.mergetree.compact.PartialUpdateMergeFunction.SEQUENCE_GROUP;
 
 /**
  * Schema of a table. Unlike schema, it has more information than {@link Schema}, including schemaId
@@ -111,7 +121,8 @@ public class TableSchema implements Serializable {
             long timeMillis) {
         this.version = version;
         this.id = id;
-        this.fields = fields;
+        //        this.fields = fields;
+        this.fields = maybeAssignColumnGroup(fields, options);
         this.highestFieldId = highestFieldId;
         this.partitionKeys = partitionKeys;
         this.primaryKeys = primaryKeys;
@@ -129,6 +140,63 @@ public class TableSchema implements Serializable {
         }
         bucketKeys = tmpBucketKeys;
         numBucket = CoreOptions.fromMap(options).bucket();
+    }
+
+    private List<DataField> maybeAssignColumnGroup(
+            List<DataField> fields, Map<String, String> options) {
+
+        if (Options.fromMap(options).get(CoreOptions.MERGE_ENGINE)
+                != CoreOptions.MergeEngine.PARTIAL_UPDATE) {
+            return fields;
+        }
+
+        Map<String, DataField> dataFieldMap = new HashMap<>();
+        for (DataField field : fields) {
+            dataFieldMap.put(field.name(), field);
+        }
+
+        Map<String, Integer> columnGroupIdMap = new HashMap<>();
+        int currentColumnGroupId = 1;
+        for (Map.Entry<String, String> entry : options.entrySet()) {
+            String k = entry.getKey();
+            String v = entry.getValue();
+            if (k.startsWith(FIELDS_PREFIX) && k.endsWith(SEQUENCE_GROUP)) {
+                List<String> fieldsInSequenceGroup = new ArrayList<>();
+
+                fieldsInSequenceGroup.addAll(
+                        Arrays.asList(
+                                k.substring(
+                                                FIELDS_PREFIX.length() + 1,
+                                                k.length() - SEQUENCE_GROUP.length() - 1)
+                                        .split(FIELDS_SEPARATOR)));
+
+                fieldsInSequenceGroup.addAll(Arrays.asList(v.split(FIELDS_SEPARATOR)));
+
+                for (String fieldName : fieldsInSequenceGroup) {
+                    Preconditions.checkNotNull(
+                            dataFieldMap.get(fieldName),
+                            String.format(
+                                    "Field %s in value %s doesn't not exist in the table.",
+                                    fieldName, v));
+                    Preconditions.checkState(
+                            !columnGroupIdMap.containsKey(fieldName),
+                            "Field %s appears in two sequence group.");
+                    columnGroupIdMap.put(fieldName, currentColumnGroupId);
+                }
+                currentColumnGroupId++;
+            }
+        }
+
+        List<DataField> newFields = new ArrayList<>();
+        for (DataField dataField : fields) {
+            Integer columnGroupId = columnGroupIdMap.get(dataField.name());
+            if (columnGroupId == null) {
+                columnGroupId = currentColumnGroupId;
+            }
+            newFields.add(dataField.newColumnGroupId(columnGroupId));
+        }
+
+        return newFields;
     }
 
     public int version() {

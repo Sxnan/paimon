@@ -170,13 +170,7 @@ public class Schema {
         List<DataField> newFields = new ArrayList<>();
         for (DataField field : fields) {
             if (pkSet.contains(field.name()) && field.type().isNullable()) {
-                newFields.add(
-                        new DataField(
-                                field.id(),
-                                field.name(),
-                                field.type().copy(false),
-                                field.description(),
-                                field.getColumnGroupId()));
+                newFields.add(field.newType(field.type().copy(false)));
             } else {
                 newFields.add(field);
             }
@@ -303,28 +297,12 @@ public class Schema {
          * @param description description of the column
          */
         public Builder column(String columnName, DataType dataType, @Nullable String description) {
-            return column(columnName, dataType, description, -1);
-        }
-
-        /**
-         * Declares a column that is appended to this schema.
-         *
-         * @param columnName column name
-         * @param dataType data type of the column
-         * @param description description of the column
-         */
-        public Builder column(
-                String columnName,
-                DataType dataType,
-                @Nullable String description,
-                int columnGroupId) {
             Preconditions.checkNotNull(columnName, "Column name must not be null.");
             Preconditions.checkNotNull(dataType, "Data type must not be null.");
 
             int id = highestFieldId.incrementAndGet();
             DataType reassignDataType = ReassignFieldId.reassign(dataType, highestFieldId);
-            columns.add(
-                    new DataField(id, columnName, reassignDataType, description, columnGroupId));
+            columns.add(new DataField(id, columnName, reassignDataType, description));
             return this;
         }
 
