@@ -237,7 +237,8 @@ public class FormatReaderMapping {
                         trimmedFields.add(keyField ? f : field);
                     }
                 } else {
-//                    throw new RuntimeException("Can't find field with id: " + id + " in fields.");
+                    //                    throw new RuntimeException("Can't find field with id: " +
+                    // id + " in fields.");
                     trimmedFields.add(field);
                 }
             }

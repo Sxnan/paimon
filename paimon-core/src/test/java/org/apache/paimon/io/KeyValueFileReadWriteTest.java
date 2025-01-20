@@ -271,7 +271,8 @@ public class KeyValueFileReadWriteTest {
                         // special format which flushes for every added element
                         new FlushingFileFormat(format),
                         pathFactoryMap,
-                        suggestedFileSize)
+                        suggestedFileSize,
+                        createTestSchemaManager(path).latest().get())
                 .build(BinaryRow.EMPTY_ROW, 0, new CoreOptions(options));
     }
 

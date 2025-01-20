@@ -31,7 +31,7 @@ import static org.apache.paimon.flink.FlinkCatalogOptions.DEFAULT_DATABASE;
 /** Factory for {@link FlinkCatalog}. */
 public class FlinkCatalogFactory implements org.apache.flink.table.factories.CatalogFactory {
 
-    public static final String IDENTIFIER = "paimon";
+    public static final String IDENTIFIER = "paimon-column-group";
 
     @Override
     public String factoryIdentifier() {

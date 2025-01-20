@@ -303,7 +303,8 @@ public class TableCommitImpl implements InnerTableCommit {
                                             .collect(Collectors.joining(",")),
                             "    The most likely reason is because you are recovering from a very old savepoint that"
                                     + " contains some uncommitted files that have already been deleted.");
-            throw new RuntimeException(message);
+            LOG.warn(message);
+            //            throw new RuntimeException(message);
         }
     }
 

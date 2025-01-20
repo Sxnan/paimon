@@ -43,6 +43,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Collections;
 
 /** MyTest. */
 public class MyTest {
@@ -258,8 +259,8 @@ public class MyTest {
                 Schema.newBuilder()
                         .column("k", DataTypes.INT(), null)
                         .column("v1", DataTypes.STRING(), null)
-                        .column("g1", DataTypes.BIGINT(), null)
                         .column("v2", DataTypes.DOUBLE(), null)
+                        .column("g1", DataTypes.BIGINT(), null)
                         .column("g2", DataTypes.BIGINT(), null)
                         .primaryKey("k")
                         //                        .option("target-file-size", "16B")
@@ -286,12 +287,13 @@ public class MyTest {
                         GenericRow.of(
                                 i % 4000,
                                 BinaryString.fromString(String.valueOf(i)),
-                                (long) i,
                                 i * 1.0,
+                                (long) i,
                                 (long) i),
                         i % 2);
             }
-            commiter.commit(0, write.prepareCommit(true, 0));
+//            commiter.commit(0, write.prepareCommit(true, 0));
+            commiter.filterAndCommit(Collections.singletonMap(0L, write.prepareCommit(true, 0)));
         }
 
         //        ReadBuilder readBuilder = table.newReadBuilder();

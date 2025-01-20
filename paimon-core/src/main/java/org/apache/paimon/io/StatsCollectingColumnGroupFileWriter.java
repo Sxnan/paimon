@@ -51,6 +51,7 @@ import java.util.function.Function;
 
 import static org.apache.paimon.io.DataFilePathFactory.dataFileToFileIndexPath;
 
+/** StatsCollectingColumnGroupFileWriter. */
 public class StatsCollectingColumnGroupFileWriter
         implements SingleFileWriter<KeyValue, DataFileMeta> {
 
@@ -334,6 +335,11 @@ public class StatsCollectingColumnGroupFileWriter
                 abortExecutors.toArray(new AbstractSingleFileWriter.AbortExecutor[0]));
     }
 
+    /**
+     * Record converter to convert record to internal row.
+     *
+     * @param <RECORD_T>
+     */
     public interface RecordConverter<RECORD_T> {
         InternalRow convert(RECORD_T record);
     }
@@ -383,6 +389,7 @@ public class StatsCollectingColumnGroupFileWriter
         maxSeqNumber = Math.max(maxSeqNumber, kv.sequenceNumber());
     }
 
+    /** Context for column group writer. */
     public interface ColumnGroupWriterContext {
         FormatWriterFactory getFormatWriterFactory(int columnGroupId);
 

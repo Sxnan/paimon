@@ -25,8 +25,8 @@ import org.apache.paimon.format.FormatWriterFactory;
 import org.apache.paimon.format.SimpleStatsCollector;
 import org.apache.paimon.fs.FileIO;
 import org.apache.paimon.fs.Path;
-import org.apache.paimon.io.RollingFileWriter;
 import org.apache.paimon.io.AbstractSingleFileWriter;
+import org.apache.paimon.io.RollingFileWriter;
 import org.apache.paimon.schema.SchemaManager;
 import org.apache.paimon.stats.SimpleStatsConverter;
 import org.apache.paimon.types.RowType;
@@ -116,7 +116,8 @@ public class ManifestFile extends ObjectsFile<ManifestEntry> {
                 suggestedFileSize);
     }
 
-    private class ManifestEntryWriter extends AbstractSingleFileWriter<ManifestEntry, ManifestFileMeta> {
+    private class ManifestEntryWriter
+            extends AbstractSingleFileWriter<ManifestEntry, ManifestFileMeta> {
 
         private final SimpleStatsCollector partitionStatsCollector;
         private final SimpleStatsConverter partitionStatsSerializer;

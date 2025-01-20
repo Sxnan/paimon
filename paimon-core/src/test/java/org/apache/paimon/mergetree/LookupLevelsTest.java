@@ -314,7 +314,8 @@ public class LookupLevelsTest {
                         rowType,
                         new FlushingFileFormat(identifier),
                         pathFactoryMap,
-                        VALUE_128_MB.getBytes())
+                        VALUE_128_MB.getBytes(),
+                        createSchemaManager(path).latest().get())
                 .build(BinaryRow.EMPTY_ROW, 0, new CoreOptions(new Options()));
     }
 

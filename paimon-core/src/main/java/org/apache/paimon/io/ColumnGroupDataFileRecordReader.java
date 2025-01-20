@@ -149,6 +149,7 @@ public class ColumnGroupDataFileRecordReader implements FileRecordReader<Interna
                 path.getParent(), String.format("%s-%d.%s", fileName, columnGroupId, format));
     }
 
+    /** Factory to create {@link FileRecordReader}. */
     public interface ColumnGroupFileRecordReaderFactory {
         FileRecordReader<InternalRow> createReader(
                 int columnGroupId, List<DataField> readDataFields, Path path) throws IOException;

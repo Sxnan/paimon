@@ -27,6 +27,7 @@ import org.apache.paimon.fs.Path;
 import java.io.IOException;
 import java.util.function.Function;
 
+/** Writer for column group key-value data file. */
 public class ColumnGroupKeyValueDataFileWriter extends AbstractSingleFileWriter<KeyValue, Void> {
 
     public ColumnGroupKeyValueDataFileWriter(

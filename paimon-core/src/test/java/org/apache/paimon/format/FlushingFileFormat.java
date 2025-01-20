@@ -74,6 +74,11 @@ public class FlushingFileFormat extends FileFormat {
                 public boolean reachTargetSize(boolean suggestedCheck, long targetSize) {
                     return totalSize > targetSize;
                 }
+
+                @Override
+                public long getEstimatedDataSize() throws IOException {
+                    return totalSize;
+                }
             };
         };
     }

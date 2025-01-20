@@ -197,7 +197,7 @@ public abstract class AbstractSingleFileWriter<T, R> implements SingleFileWriter
     }
 
     /** Abort executor to just have reference of path instead of whole writer. */
-    public static class AbortExecutor  implements SingleFileWriter.AbortExecutor {
+    public static class AbortExecutor implements SingleFileWriter.AbortExecutor {
 
         private final FileIO fileIO;
         private final Path path;

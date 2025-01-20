@@ -199,7 +199,8 @@ public class ChangelogMergeTreeRewriterTest {
                         valueType,
                         new FlushingFileFormat("avro"),
                         Collections.singletonMap("avro", createNonPartFactory(path)),
-                        VALUE_128_MB.getBytes())
+                        VALUE_128_MB.getBytes(),
+                        tableSchema)
                 .build(BinaryRow.EMPTY_ROW, 0, new CoreOptions(new Options()));
     }
 
