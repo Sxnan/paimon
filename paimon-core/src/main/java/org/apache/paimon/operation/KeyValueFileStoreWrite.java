@@ -60,6 +60,7 @@ import org.apache.paimon.mergetree.compact.LookupMergeTreeCompactRewriter.Lookup
 import org.apache.paimon.mergetree.compact.MergeFunctionFactory;
 import org.apache.paimon.mergetree.compact.MergeTreeCompactManager;
 import org.apache.paimon.mergetree.compact.MergeTreeCompactRewriter;
+import org.apache.paimon.mergetree.compact.PerColumnGroupMergeTreeCompactRewriter;
 import org.apache.paimon.mergetree.compact.UniversalCompaction;
 import org.apache.paimon.options.Options;
 import org.apache.paimon.schema.KeyValueFieldsExtractor;
@@ -109,6 +110,7 @@ public class KeyValueFileStoreWrite extends MemoryFileStoreWrite<KeyValue> {
     private final RowType partitionType;
     private final String commitUser;
     @Nullable private final RecordLevelExpire recordLevelExpire;
+    private final TableSchema schema;
     @Nullable private Cache<String, LookupFile> lookupFileCache;
 
     public KeyValueFileStoreWrite(
@@ -173,6 +175,7 @@ public class KeyValueFileStoreWrite extends MemoryFileStoreWrite<KeyValue> {
         this.logDedupEqualSupplier = logDedupEqualSupplier;
         this.mfFactory = mfFactory;
         this.options = options;
+        this.schema = schema;
     }
 
     @Override
@@ -269,7 +272,7 @@ public class KeyValueFileStoreWrite extends MemoryFileStoreWrite<KeyValue> {
         }
     }
 
-    private MergeTreeCompactRewriter createRewriter(
+    private CompactRewriter createRewriter(
             BinaryRow partition,
             int bucket,
             Comparator<InternalRow> keyComparator,
@@ -346,13 +349,24 @@ public class KeyValueFileStoreWrite extends MemoryFileStoreWrite<KeyValue> {
                     dvMaintainer,
                     options);
         } else {
-            return new MergeTreeCompactRewriter(
-                    readerFactory,
-                    writerFactory,
-                    keyComparator,
-                    userDefinedSeqComparator,
-                    mfFactory,
-                    mergeSorter);
+            if (schema.getColumnGroupNum() > 0) {
+                return new PerColumnGroupMergeTreeCompactRewriter(
+                        readerFactory,
+                        writerFactory,
+                        keyComparator,
+                        userDefinedSeqComparator,
+                        mfFactory,
+                        mergeSorter,
+                        schema.getColumnGroupNum());
+            } else {
+                return new MergeTreeCompactRewriter(
+                        readerFactory,
+                        writerFactory,
+                        keyComparator,
+                        userDefinedSeqComparator,
+                        mfFactory,
+                        mergeSorter);
+            }
         }
     }
 

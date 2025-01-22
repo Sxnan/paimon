@@ -18,8 +18,11 @@
 
 package org.apache.paimon.mergetree.compact;
 
+import org.apache.paimon.mergetree.PerColumnGroupMergeSorter;
 import org.apache.paimon.reader.RecordReader;
 import org.apache.paimon.utils.ExceptionUtils;
+
+import javax.annotation.Nullable;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -45,6 +48,10 @@ import java.util.List;
 public class LoserTree<T> implements Closeable {
     private final int[] tree;
     private final int size;
+
+    @Nullable
+    private final PerColumnGroupMergeSorter.SortMergeActionListener<T> sortMergeActionListener;
+
     private final List<LeafIterator<T>> leaves;
 
     /**
@@ -62,7 +69,17 @@ public class LoserTree<T> implements Closeable {
             List<RecordReader<T>> nextBatchReaders,
             Comparator<T> firstComparator,
             Comparator<T> secondComparator) {
+        this(nextBatchReaders, firstComparator, secondComparator, null);
+    }
+
+    public LoserTree(
+            List<RecordReader<T>> nextBatchReaders,
+            Comparator<T> firstComparator,
+            Comparator<T> secondComparator,
+            @Nullable
+                    PerColumnGroupMergeSorter.SortMergeActionListener<T> sortMergeActionListener) {
         this.size = nextBatchReaders.size();
+        this.sortMergeActionListener = sortMergeActionListener;
         this.leaves = new ArrayList<>(size);
         this.tree = new int[size];
         // if e1 and e2 are both null, it doesn't matter who becomes the new winner. But if
@@ -108,6 +125,9 @@ public class LoserTree<T> implements Closeable {
             // if the winner has already been popped, it means that all the same key has been
             // processed.
             return null;
+        }
+        if (sortMergeActionListener != null) {
+            sortMergeActionListener.onReadFromReader(winner.reader);
         }
         T result = winner.pop();
         adjust(tree[0]);

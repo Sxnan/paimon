@@ -20,6 +20,7 @@ package org.apache.paimon.mergetree.compact;
 
 import org.apache.paimon.KeyValue;
 import org.apache.paimon.data.InternalRow;
+import org.apache.paimon.mergetree.PerColumnGroupMergeSorter;
 import org.apache.paimon.reader.RecordReader;
 import org.apache.paimon.utils.FieldsComparator;
 import org.apache.paimon.utils.Preconditions;
@@ -34,19 +35,29 @@ import java.util.List;
 public class SortMergeReaderWithLoserTree<T> implements SortMergeReader<T> {
 
     private final MergeFunctionWrapper<T> mergeFunctionWrapper;
+
+    @Nullable
+    private final PerColumnGroupMergeSorter.SortMergeActionListener<KeyValue>
+            sortMergeActionListener;
+
     private final LoserTree<KeyValue> loserTree;
 
     public SortMergeReaderWithLoserTree(
             List<RecordReader<KeyValue>> readers,
             Comparator<InternalRow> userKeyComparator,
             @Nullable FieldsComparator userDefinedSeqComparator,
-            MergeFunctionWrapper<T> mergeFunctionWrapper) {
+            MergeFunctionWrapper<T> mergeFunctionWrapper,
+            @Nullable
+                    PerColumnGroupMergeSorter.SortMergeActionListener<KeyValue>
+                            sortMergeActionListener) {
         this.mergeFunctionWrapper = mergeFunctionWrapper;
+        this.sortMergeActionListener = sortMergeActionListener;
         this.loserTree =
                 new LoserTree<>(
                         readers,
                         (e1, e2) -> userKeyComparator.compare(e2.key(), e1.key()),
-                        createSequenceComparator(userDefinedSeqComparator));
+                        createSequenceComparator(userDefinedSeqComparator),
+                        sortMergeActionListener);
     }
 
     private Comparator<KeyValue> createSequenceComparator(
@@ -96,6 +107,9 @@ public class SortMergeReaderWithLoserTree<T> implements SortMergeReader<T> {
 
                 T result = merge();
                 if (result != null) {
+                    if (sortMergeActionListener != null) {
+                        sortMergeActionListener.onMerge(winner.key());
+                    }
                     return result;
                 }
             }

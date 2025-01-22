@@ -44,6 +44,7 @@ import javax.annotation.Nullable;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -107,6 +108,43 @@ public class KeyValueFileWriterFactory {
     @VisibleForTesting
     public DataFilePathFactory pathFactory(int level) {
         return formatContext.pathFactory(level);
+    }
+
+    public FileWriter<KeyValue, List<DataFileMeta>> createPerColumnGroupRollingMergeTreeFileWriter(
+            int level, FileSource fileSource) {
+        return new PerColumnGroupRollingFileWriter(
+                (columnGroupId) ->
+                        new StatsCollectingPerColumnGroupFileWriter(
+                                columnGroupId,
+                                (keyType, valueType) ->
+                                        new WriteFormatContext(
+                                                        partition,
+                                                        bucket,
+                                                        keyType,
+                                                        valueType,
+                                                        fileFormat,
+                                                        format2PathFactory,
+                                                        options,
+                                                        columnGroupId)
+                                                .writerFactory(level),
+                                formatContext.pathFactory(level).currentPath(),
+                                schema,
+                                formatContext.compression(level),
+                                options.asyncFileWrite(),
+                                keyType,
+                                valueType,
+                                //                                kvSerializer::toRow,
+                                KeyValue.schema(keyType, valueType),
+                                formatContext.extractor(level),
+                                StatsCollectorFactories.createStatsFactories(
+                                        options,
+                                        KeyValue.schema(keyType, valueType).getFieldNames()),
+                                fileIO,
+                                options,
+                                fileIndexOptions,
+                                level,
+                                fileSource),
+                suggestedFileSize);
     }
 
     public RollingFileWriter<KeyValue, DataFileMeta> createRollingMergeTreeFileWriter(

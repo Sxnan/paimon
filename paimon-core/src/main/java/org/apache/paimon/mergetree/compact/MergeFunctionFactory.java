@@ -32,6 +32,10 @@ public interface MergeFunctionFactory<T> extends Serializable {
 
     MergeFunction<T> create(@Nullable int[][] projection);
 
+    default MergeFunction<T> createForColumnGroup(int columnGroupId) {
+        throw new UnsupportedOperationException();
+    }
+
     // todo: replace projection with rowType
     default AdjustedProjection adjustProjection(@Nullable int[][] projection) {
         return new AdjustedProjection(projection, null);

@@ -70,6 +70,10 @@ public class DataFilePathFactory {
         return newPath(dataFilePrefix);
     }
 
+    public Path currentPath() {
+        return new Path(parent, currentFileName(dataFilePrefix));
+    }
+
     public Path newChangelogPath() {
         return newPath(changelogFilePrefix);
     }
@@ -94,6 +98,16 @@ public class DataFilePathFactory {
             extension = "." + formatIdentifier;
         }
         return prefix + uuid + "-" + pathCount.getAndIncrement() + extension;
+    }
+
+    private String currentFileName(String prefix) {
+        String extension;
+        if (fileSuffixIncludeCompression) {
+            extension = "." + fileCompression + "." + formatIdentifier;
+        } else {
+            extension = "." + formatIdentifier;
+        }
+        return prefix + uuid + "-" + pathCount.get() + extension;
     }
 
     public Path toPath(DataFileMeta file) {

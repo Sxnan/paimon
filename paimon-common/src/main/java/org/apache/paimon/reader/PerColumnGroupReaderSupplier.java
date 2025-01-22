@@ -16,20 +16,12 @@
  * limitations under the License.
  */
 
-package org.apache.paimon.io;
-
-import org.apache.paimon.reader.PerColumnGroupRecordReader;
-import org.apache.paimon.reader.RecordReader;
+package org.apache.paimon.reader;
 
 import java.io.IOException;
 
-/** Factory to read records from file. */
-public interface FileReaderFactory<T> {
-
-    RecordReader<T> createRecordReader(DataFileMeta file) throws IOException;
-
-    default PerColumnGroupRecordReader<T> createPerColumnGroupedRecordReader(DataFileMeta file)
-            throws IOException {
-        throw new UnsupportedOperationException();
-    }
+/** Supplier to get {@link RecordReader}. */
+@FunctionalInterface
+public interface PerColumnGroupReaderSupplier<T> {
+    PerColumnGroupRecordReader<T> get() throws IOException;
 }

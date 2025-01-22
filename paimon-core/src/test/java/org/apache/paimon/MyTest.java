@@ -372,16 +372,39 @@ public class MyTest {
 
         try (StreamTableWrite write = streamWriteBuilder.newWrite();
                 StreamTableCommit commiter = streamWriteBuilder.newCommit()) {
-            write.write(GenericRow.of(0, BinaryString.fromString("0"), 0L, null, null), 0);
-            write.write(GenericRow.of(1, BinaryString.fromString("1"), 0L, null, null), 0);
+            write.write(GenericRow.of(0, BinaryString.fromString("0"), 2L, 0.0, 0L), 0);
+            write.write(GenericRow.of(1, BinaryString.fromString("1"), 0L, 1.1, null), 0);
             commiter.commit(0, write.prepareCommit(false, 0));
         }
 
         try (StreamTableWrite write = streamWriteBuilder.newWrite();
                 StreamTableCommit commiter = streamWriteBuilder.newCommit()) {
-            write.write(GenericRow.of(0, BinaryString.fromString("00"), 1L, null, null), 0);
-            write.write(GenericRow.of(2, BinaryString.fromString("22"), 1L, null, null), 0);
+            write.write(GenericRow.of(0, BinaryString.fromString("00"), 1L, 1.0, 10L), 0);
+            write.write(GenericRow.of(2, BinaryString.fromString("22"), 1L, 2.2, 20L), 0);
             commiter.commit(1, write.prepareCommit(true, 1));
+        }
+
+        ReadBuilder readBuilder = table.newReadBuilder();
+        TableScan.Plan plan = readBuilder.newScan().plan();
+        try (RecordReader<InternalRow> reader = readBuilder.newRead().createReader(plan)) {
+            RecordReader.RecordIterator<InternalRow> iter = reader.readBatch();
+
+            while (iter != null) {
+                InternalRow row = iter.next();
+                if (row == null) {
+                    iter.releaseBatch();
+                    iter = reader.readBatch();
+                    continue;
+                }
+                System.out.printf(
+                        "%d, %s, %d, %f, %d\n",
+                        row.getInt(0),
+                        row.getString(1),
+                        row.getLong(2),
+                        row.getDouble(3),
+                        row.getLong(4));
+                //                System.out.printf("%d\n", row.getInt(0));
+            }
         }
     }
 

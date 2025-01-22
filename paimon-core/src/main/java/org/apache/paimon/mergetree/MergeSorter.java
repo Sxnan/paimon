@@ -107,13 +107,33 @@ public class MergeSorter {
             @Nullable FieldsComparator userDefinedSeqComparator,
             MergeFunctionWrapper<T> mergeFunction)
             throws IOException {
+        return mergeSort(lazyReaders, keyComparator, userDefinedSeqComparator, mergeFunction, null);
+    }
+
+    public <T> RecordReader<T> mergeSort(
+            List<SizedReaderSupplier<KeyValue>> lazyReaders,
+            Comparator<InternalRow> keyComparator,
+            @Nullable FieldsComparator userDefinedSeqComparator,
+            MergeFunctionWrapper<T> mergeFunction,
+            @Nullable
+                    PerColumnGroupMergeSorter.SortMergeActionListener<KeyValue>
+                            sortMergeActionListener)
+            throws IOException {
         if (ioManager != null && lazyReaders.size() > spillThreshold) {
             return spillMergeSort(
-                    lazyReaders, keyComparator, userDefinedSeqComparator, mergeFunction);
+                    lazyReaders,
+                    keyComparator,
+                    userDefinedSeqComparator,
+                    mergeFunction,
+                    sortMergeActionListener);
         }
 
         return mergeSortNoSpill(
-                lazyReaders, keyComparator, userDefinedSeqComparator, mergeFunction);
+                lazyReaders,
+                keyComparator,
+                userDefinedSeqComparator,
+                mergeFunction,
+                sortMergeActionListener);
     }
 
     public <T> RecordReader<T> mergeSortNoSpill(
@@ -121,6 +141,19 @@ public class MergeSorter {
             Comparator<InternalRow> keyComparator,
             @Nullable FieldsComparator userDefinedSeqComparator,
             MergeFunctionWrapper<T> mergeFunction)
+            throws IOException {
+        return mergeSortNoSpill(
+                lazyReaders, keyComparator, userDefinedSeqComparator, mergeFunction, null);
+    }
+
+    public <T> RecordReader<T> mergeSortNoSpill(
+            List<? extends ReaderSupplier<KeyValue>> lazyReaders,
+            Comparator<InternalRow> keyComparator,
+            @Nullable FieldsComparator userDefinedSeqComparator,
+            MergeFunctionWrapper<T> mergeFunction,
+            @Nullable
+                    PerColumnGroupMergeSorter.SortMergeActionListener<KeyValue>
+                            sortMergeActionListener)
             throws IOException {
         List<RecordReader<KeyValue>> readers = new ArrayList<>(lazyReaders.size());
         for (ReaderSupplier<KeyValue> supplier : lazyReaders) {
@@ -134,14 +167,20 @@ public class MergeSorter {
         }
 
         return SortMergeReader.createSortMergeReader(
-                readers, keyComparator, userDefinedSeqComparator, mergeFunction, sortEngine);
+                readers,
+                keyComparator,
+                userDefinedSeqComparator,
+                mergeFunction,
+                sortEngine,
+                sortMergeActionListener);
     }
 
     private <T> RecordReader<T> spillMergeSort(
             List<SizedReaderSupplier<KeyValue>> inputReaders,
             Comparator<InternalRow> keyComparator,
             @Nullable FieldsComparator userDefinedSeqComparator,
-            MergeFunctionWrapper<T> mergeFunction)
+            MergeFunctionWrapper<T> mergeFunction,
+            PerColumnGroupMergeSorter.SortMergeActionListener<KeyValue> sortMergeActionListener)
             throws IOException {
         List<SizedReaderSupplier<KeyValue>> sortedReaders = new ArrayList<>(inputReaders);
         sortedReaders.sort(Comparator.comparingLong(SizedReaderSupplier::estimateSize));
@@ -153,7 +192,12 @@ public class MergeSorter {
             readers.add(spill(supplier));
         }
 
-        return mergeSortNoSpill(readers, keyComparator, userDefinedSeqComparator, mergeFunction);
+        return mergeSortNoSpill(
+                readers,
+                keyComparator,
+                userDefinedSeqComparator,
+                mergeFunction,
+                sortMergeActionListener);
     }
 
     private ReaderSupplier<KeyValue> spill(ReaderSupplier<KeyValue> readerSupplier)

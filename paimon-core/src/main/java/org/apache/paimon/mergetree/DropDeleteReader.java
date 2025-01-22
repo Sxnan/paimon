@@ -19,6 +19,7 @@
 package org.apache.paimon.mergetree;
 
 import org.apache.paimon.KeyValue;
+import org.apache.paimon.reader.PerColumnGroupRecordReader;
 import org.apache.paimon.reader.RecordReader;
 import org.apache.paimon.types.RowKind;
 
@@ -30,7 +31,8 @@ import java.io.IOException;
  * A {@link RecordReader} which drops {@link KeyValue} that does not meet {@link RowKind#isAdd} from
  * the wrapped reader.
  */
-public class DropDeleteReader implements RecordReader<KeyValue> {
+public class DropDeleteReader
+        implements RecordReader<KeyValue>, PerColumnGroupRecordReader<KeyValue> {
 
     private final RecordReader<KeyValue> reader;
 
@@ -71,5 +73,10 @@ public class DropDeleteReader implements RecordReader<KeyValue> {
     @Override
     public void close() throws IOException {
         reader.close();
+    }
+
+    @Override
+    public int nextColumnGroup() throws Exception {
+        return ((PerColumnGroupRecordReader<KeyValue>) reader).nextColumnGroup();
     }
 }

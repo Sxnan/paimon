@@ -33,6 +33,7 @@ import org.apache.paimon.fs.Path;
 import org.apache.paimon.partition.PartitionUtils;
 import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.reader.FileRecordReader;
+import org.apache.paimon.reader.PerColumnGroupRecordReader;
 import org.apache.paimon.reader.RecordReader;
 import org.apache.paimon.schema.KeyValueFieldsExtractor;
 import org.apache.paimon.schema.SchemaManager;
@@ -111,6 +112,68 @@ public class KeyValueFileReaderFactory implements FileReaderFactory<KeyValue> {
             return new AsyncRecordReader<>(() -> createRecordReader(file, false, 2));
         }
         return createRecordReader(file, true, null);
+    }
+
+    public PerColumnGroupRecordReader<KeyValue> createPerColumnGroupRecordReader(
+            DataFileMeta file, long schemaId, String fileName, long fileSize, int level)
+            throws IOException {
+
+        // TODO: support async
+        //        if (fileSize >= asyncThreshold && fileName.endsWith(".orc")) {
+        //            return new AsyncRecordReader<>(
+        //                    () -> createRecordReader(schemaId, fileName, level, false, 2,
+        // fileSize));
+        //        }
+
+        String formatIdentifier = DataFilePathFactory.formatIdentifier(fileName);
+
+        Supplier<FormatReaderMapping> formatSupplier =
+                () ->
+                        formatReaderMappingBuilder.build(
+                                formatIdentifier,
+                                schema,
+                                schemaId == schema.id() ? schema : schemaManager.schema(schemaId));
+
+        FormatReaderMapping bulkFormatMapping = formatSupplier.get();
+        Path filePath = pathFactory.toPath(file);
+
+        PerColumnGroupDataFileRecordReader fileRecordReader =
+                new PerColumnGroupDataFileRecordReader(
+                        (columnGroupId) -> {
+                            List<DataField> readTableFields =
+                                    KeyValue.createKeyValueFields(
+                                            columnGroupId,
+                                            keyType.getFields(),
+                                            valueType.getFields());
+                            FormatReaderMapping.Builder bulkFormatMappingBuilder =
+                                    new FormatReaderMapping.Builder(
+                                            formatDiscover,
+                                            readTableFields,
+                                            (schema) ->
+                                                    KeyValue.createKeyValueFields(
+                                                            columnGroupId,
+                                                            extractor.keyFields(schema).stream()
+                                                                    .map(k -> k.newColumnGroupId(0))
+                                                                    .collect(Collectors.toList()),
+                                                            extractor.valueFields(schema)),
+                                            filters);
+                            return bulkFormatMappingBuilder.build(
+                                    formatIdentifier,
+                                    schema,
+                                    schemaId == schema.id()
+                                            ? schema
+                                            : schemaManager.schema(schemaId));
+                        },
+                        (path) -> new FormatReaderContext(fileIO, path, fileIO.getFileSize(path)),
+                        filePath,
+                        schema,
+                        bulkFormatMapping.getReadRowType().getFields(),
+                        bulkFormatMapping.getIndexMapping(),
+                        bulkFormatMapping.getCastMapping(),
+                        PartitionUtils.create(bulkFormatMapping.getPartitionPair(), partition));
+
+        return new PerColumnGroupKeyValueDataFileRecordReader(
+                fileRecordReader, keyType, valueType, level);
     }
 
     private FileRecordReader<KeyValue> createRecordReader(
@@ -199,6 +262,13 @@ public class KeyValueFileReaderFactory implements FileReaderFactory<KeyValue> {
         }
 
         return new KeyValueDataFileRecordReader(fileRecordReader, keyType, valueType, file.level());
+    }
+
+    @Override
+    public PerColumnGroupRecordReader<KeyValue> createPerColumnGroupedRecordReader(
+            DataFileMeta file) throws IOException {
+        return createPerColumnGroupRecordReader(
+                file, file.schemaId(), file.fileName(), file.fileSize(), file.level());
     }
 
     public static Builder builder(

@@ -284,7 +284,7 @@ public class PartialUpdateMergeFunction implements MergeFunction<KeyValue> {
 
         private final List<DataType> tableTypes;
 
-        private final Map<Integer, Supplier<FieldsComparator>> fieldSeqComparators;
+        private final Map<Integer, FieldComparatorFactory> fieldSeqComparators;
 
         private final Map<Integer, Supplier<FieldAggregator>> fieldAggregators;
 
@@ -322,8 +322,8 @@ public class PartialUpdateMergeFunction implements MergeFunction<KeyValue> {
                                     .collect(Collectors.toList());
                     allSequenceFields.addAll(sequenceFields);
 
-                    Supplier<FieldsComparator> userDefinedSeqComparator =
-                            () -> UserDefinedSeqComparator.create(rowType, sequenceFields, true);
+                    FieldComparatorFactory userDefinedSeqComparator =
+                            new FieldComparatorFactory(rowType, sequenceFields, true);
                     Arrays.stream(v.split(FIELDS_SEPARATOR))
                             .map(
                                     fieldName ->
@@ -404,7 +404,7 @@ public class PartialUpdateMergeFunction implements MergeFunction<KeyValue> {
 
                 fieldSeqComparators.forEach(
                         (field, comparatorSupplier) -> {
-                            FieldsComparator comparator = comparatorSupplier.get();
+                            FieldsComparator comparator = comparatorSupplier.create();
                             int newField = indexMap.getOrDefault(field, -1);
                             if (newField != -1) {
                                 int[] newSequenceFields =
@@ -449,7 +449,7 @@ public class PartialUpdateMergeFunction implements MergeFunction<KeyValue> {
             } else {
                 Map<Integer, FieldsComparator> fieldSeqComparators = new HashMap<>();
                 this.fieldSeqComparators.forEach(
-                        (f, supplier) -> fieldSeqComparators.put(f, supplier.get()));
+                        (f, supplier) -> fieldSeqComparators.put(f, supplier.create()));
                 Map<Integer, FieldAggregator> fieldAggregators = new HashMap<>();
                 this.fieldAggregators.forEach(
                         (f, supplier) -> fieldAggregators.put(f, supplier.get()));
@@ -465,6 +465,54 @@ public class PartialUpdateMergeFunction implements MergeFunction<KeyValue> {
         }
 
         @Override
+        public MergeFunction<KeyValue> createForColumnGroup(int columnGroupId) {
+            // TODO: Support projection
+
+            List<String> fieldNameForGroup = new ArrayList<>();
+            for (int i = 0; i < rowType.getFields().size(); i++) {
+                DataField field = rowType.getFields().get(i);
+                if (field.getColumnGroupId() == columnGroupId) {
+                    fieldNameForGroup.add(field.name());
+                }
+            }
+            RowType rowTypeForGroup = rowType.project(fieldNameForGroup);
+
+            Map<Integer, FieldsComparator> fieldSeqComparators = new HashMap<>();
+            fieldNameForGroup.forEach(
+                    fieldName -> {
+                        int fieldIndex = rowTypeForGroup.getFieldIndex(fieldName);
+                        if (!this.fieldSeqComparators.containsKey(
+                                rowType.getFieldIndex(fieldName))) {
+                            return;
+                        }
+                        fieldSeqComparators.put(
+                                fieldIndex,
+                                this.fieldSeqComparators
+                                        .get(rowType.getFieldIndex(fieldName))
+                                        .create(columnGroupId));
+                    });
+
+            // TODO: Support aggregator
+            Map<Integer, FieldAggregator> fieldAggregators = new HashMap<>();
+            this.fieldAggregators.forEach(
+                    (f, supplier) -> {
+                        if (fieldNameForGroup.contains(f)) {
+                            fieldAggregators.put(f, supplier.get());
+                        }
+                    });
+
+            List<DataType> columnGroupDataTypes = rowTypeForGroup.getFieldTypes();
+            return new PartialUpdateMergeFunction(
+                    createFieldGetters(columnGroupDataTypes),
+                    ignoreDelete,
+                    fieldSeqComparators,
+                    fieldAggregators,
+                    !fieldSeqComparators.isEmpty(),
+                    removeRecordOnDelete,
+                    sequenceGroupPartialDelete);
+        }
+
+        @Override
         public AdjustedProjection adjustProjection(@Nullable int[][] projection) {
             if (fieldSeqComparators.isEmpty()) {
                 return new AdjustedProjection(projection, null);
@@ -477,12 +525,12 @@ public class PartialUpdateMergeFunction implements MergeFunction<KeyValue> {
             int[] topProjects = Projection.of(projection).toTopLevelIndexes();
             Set<Integer> indexSet = Arrays.stream(topProjects).boxed().collect(Collectors.toSet());
             for (int index : topProjects) {
-                Supplier<FieldsComparator> comparatorSupplier = fieldSeqComparators.get(index);
+                FieldComparatorFactory comparatorSupplier = fieldSeqComparators.get(index);
                 if (comparatorSupplier == null) {
                     continue;
                 }
 
-                FieldsComparator comparator = comparatorSupplier.get();
+                FieldsComparator comparator = comparatorSupplier.create();
                 for (int field : comparator.compareFields()) {
                     if (!indexSet.contains(field)) {
                         extraFields.add(field);
@@ -561,6 +609,35 @@ public class PartialUpdateMergeFunction implements MergeFunction<KeyValue> {
                 }
             }
             return fieldAggregators;
+        }
+    }
+
+    private static class FieldComparatorFactory {
+
+        private final RowType rowType;
+        private final List<String> sequenceFields;
+        private final boolean isAscendingOrder;
+
+        FieldComparatorFactory(
+                RowType rowType, List<String> sequenceFields, boolean isAscendingOrder) {
+            this.rowType = rowType;
+            this.sequenceFields = sequenceFields;
+            this.isAscendingOrder = isAscendingOrder;
+        }
+
+        FieldsComparator create() {
+            return UserDefinedSeqComparator.create(rowType, sequenceFields, isAscendingOrder);
+        }
+
+        FieldsComparator create(int columnGroupId) {
+            List<String> fieldNameForGroup =
+                    rowType.getFields().stream()
+                            .filter(field -> field.getColumnGroupId() == columnGroupId)
+                            .map(DataField::name)
+                            .collect(Collectors.toList());
+
+            return UserDefinedSeqComparator.create(
+                    rowType.project(fieldNameForGroup), sequenceFields, isAscendingOrder);
         }
     }
 }
