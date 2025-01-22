@@ -39,6 +39,9 @@ import org.apache.paimon.types.RowKind;
 import org.apache.paimon.utils.Preconditions;
 import org.apache.paimon.utils.ProjectedRow;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import javax.annotation.Nullable;
 
 import java.io.IOException;
@@ -52,6 +55,9 @@ import java.util.stream.Collectors;
 /** Reads {@link InternalRow} from data files. */
 public class ColumnGroupDataFileRecordReader implements FileRecordReader<InternalRow> {
 
+    private static final Logger LOG =
+            LoggerFactory.getLogger(ColumnGroupDataFileRecordReader.class);
+
     private final Path path;
     private final int totalColumnGroup;
     private final Map<Integer, FileRecordReader<InternalRow>> readers;
@@ -59,6 +65,8 @@ public class ColumnGroupDataFileRecordReader implements FileRecordReader<Interna
     @Nullable private final int[] indexMapping;
     @Nullable private final PartitionInfo partitionInfo;
     @Nullable private final CastFieldGetter[] castMapping;
+    private final Map<Integer, FileRecordIterator<InternalRow>> columnGroupIters;
+    private final FileRecordIterator<InternalRow> reusedIterator;
 
     public ColumnGroupDataFileRecordReader(
             ColumnGroupFileRecordReaderFactory columnGroupFileRecordReaderFactory,
@@ -76,7 +84,6 @@ public class ColumnGroupDataFileRecordReader implements FileRecordReader<Interna
 
         for (int i = 0; i < totalColumnGroup; i++) {
             int columnGroupId = i;
-
             if (readDataFields.stream().anyMatch(f -> f.getColumnGroupId() == columnGroupId)) {
                 this.readers.put(
                         columnGroupId,
@@ -88,15 +95,20 @@ public class ColumnGroupDataFileRecordReader implements FileRecordReader<Interna
                                 toColumnGroupPath(i, path)));
             }
         }
+
+        LOG.info("Read from the following column group readers {}", readers.keySet());
         this.indexMapping = indexMapping;
         this.partitionInfo = partitionInfo;
         this.castMapping = castMapping;
+        columnGroupIters = new HashMap<>();
+        reusedIterator =
+                new ColumnGroupFileRecordIterator(
+                        this.path, this.totalColumnGroup, columnGroupIters, readDataField);
     }
 
     @Nullable
     @Override
     public FileRecordIterator<InternalRow> readBatch() throws IOException {
-        Map<Integer, FileRecordIterator<InternalRow>> columnGroupIters = new HashMap<>();
 
         for (Map.Entry<Integer, FileRecordReader<InternalRow>> entry : readers.entrySet()) {
             FileRecordIterator<InternalRow> iterator = entry.getValue().readBatch();
@@ -106,31 +118,28 @@ public class ColumnGroupDataFileRecordReader implements FileRecordReader<Interna
             columnGroupIters.put(entry.getKey(), iterator);
         }
 
-        FileRecordIterator<InternalRow> iterator =
-                new ColumnGroupFileRecordIterator(
-                        path, totalColumnGroup, columnGroupIters, readDataField);
-
+        FileRecordIterator<InternalRow> result = reusedIterator;
         // TODO: support mapping partition info and index mapping
-        if (iterator instanceof ColumnarRowIterator) {
-            iterator = ((ColumnarRowIterator) iterator).mapping(partitionInfo, indexMapping);
+        if (reusedIterator instanceof ColumnarRowIterator) {
+            result = ((ColumnarRowIterator) reusedIterator).mapping(partitionInfo, indexMapping);
         } else {
             if (partitionInfo != null) {
                 final PartitionSettedRow partitionSettedRow =
                         PartitionSettedRow.from(partitionInfo);
-                iterator = iterator.transform(partitionSettedRow::replaceRow);
+                result = reusedIterator.transform(partitionSettedRow::replaceRow);
             }
             if (indexMapping != null) {
                 final ProjectedRow projectedRow = ProjectedRow.from(indexMapping);
-                iterator = iterator.transform(projectedRow::replaceRow);
+                result = reusedIterator.transform(projectedRow::replaceRow);
             }
         }
 
         if (castMapping != null) {
             final CastedRow castedRow = CastedRow.from(castMapping);
-            iterator = iterator.transform(castedRow::replaceRow);
+            result = reusedIterator.transform(castedRow::replaceRow);
         }
 
-        return iterator;
+        return result;
     }
 
     @Override
@@ -157,9 +166,9 @@ public class ColumnGroupDataFileRecordReader implements FileRecordReader<Interna
 
     private static class ColumnGroupFileRecordIterator implements FileRecordIterator<InternalRow> {
         private final Path path;
-        private final int columnGroupNum;
         private final Map<Integer, FileRecordIterator<InternalRow>> columnGroupRecordIters;
-        private final List<DataField> readDataFields;
+        private final Map<Integer, InternalRow> columnGroupRows;
+        private final ColumnGroupedRow reusedRow;
 
         ColumnGroupFileRecordIterator(
                 Path path,
@@ -167,9 +176,9 @@ public class ColumnGroupDataFileRecordReader implements FileRecordReader<Interna
                 Map<Integer, FileRecordIterator<InternalRow>> columnGroupRecordIters,
                 List<DataField> readDataFields) {
             this.path = path;
-            this.columnGroupNum = columnGroupNum;
             this.columnGroupRecordIters = columnGroupRecordIters;
-            this.readDataFields = readDataFields;
+            this.columnGroupRows = new HashMap<>();
+            this.reusedRow = new ColumnGroupedRow(columnGroupNum, columnGroupRows, readDataFields);
         }
 
         @Override
@@ -184,7 +193,7 @@ public class ColumnGroupDataFileRecordReader implements FileRecordReader<Interna
 
         @Override
         public InternalRow next() throws IOException {
-            Map<Integer, InternalRow> columnGroupRows = new HashMap<>();
+            //            Map<Integer, InternalRow> columnGroupRows = new HashMap<>();
             for (Map.Entry<Integer, FileRecordIterator<InternalRow>> entry :
                     columnGroupRecordIters.entrySet()) {
                 InternalRow columnGroupRow = entry.getValue().next();
@@ -195,7 +204,7 @@ public class ColumnGroupDataFileRecordReader implements FileRecordReader<Interna
                 columnGroupRows.put(entry.getKey(), columnGroupRow);
             }
 
-            return new ColumnGroupedRow(columnGroupNum, columnGroupRows, readDataFields);
+            return reusedRow;
         }
 
         @Override

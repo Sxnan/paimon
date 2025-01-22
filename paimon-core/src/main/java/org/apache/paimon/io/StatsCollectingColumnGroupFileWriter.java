@@ -310,7 +310,7 @@ public class StatsCollectingColumnGroupFileWriter
     }
 
     public boolean reachTargetSize(boolean suggestedCheck, long targetFileSize) throws IOException {
-        return suggestedCheck && getTotalDataSize() > targetFileSize;
+        return suggestedCheck && getMaxDataSize() >= targetFileSize;
     }
 
     @Override
@@ -318,12 +318,12 @@ public class StatsCollectingColumnGroupFileWriter
         return path;
     }
 
-    private long getTotalDataSize() throws IOException {
-        long totalSize = 0;
+    private long getMaxDataSize() throws IOException {
+        long maxSize = 0;
         for (AbstractSingleFileWriter<KeyValue, ?> writer : writers) {
-            totalSize += writer.getEstimatedDataSize();
+            maxSize = Math.max(maxSize, writer.getEstimatedDataSize());
         }
-        return totalSize;
+        return maxSize;
     }
 
     public AbortExecutor abortExecutor() {

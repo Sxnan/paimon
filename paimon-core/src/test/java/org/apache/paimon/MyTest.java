@@ -43,7 +43,6 @@ import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.Collections;
 
 /** MyTest. */
 public class MyTest {
@@ -263,8 +262,8 @@ public class MyTest {
                         .column("g1", DataTypes.BIGINT(), null)
                         .column("g2", DataTypes.BIGINT(), null)
                         .primaryKey("k")
-                        //                        .option("target-file-size", "16B")
-                        //                        .option("write-buffer-size", "256 kb")
+                        .option("target-file-size", "16B")
+                        .option("write-buffer-size", "256 kb")
                         .option("num-sorted-run.compaction-trigger", "10000")
                         .option("merge-engine", "partial-update")
                         .option("fields.g1.sequence-group", "v1")
@@ -292,8 +291,9 @@ public class MyTest {
                                 (long) i),
                         i % 2);
             }
-//            commiter.commit(0, write.prepareCommit(true, 0));
-            commiter.filterAndCommit(Collections.singletonMap(0L, write.prepareCommit(true, 0)));
+            commiter.commit(0, write.prepareCommit(true, 0));
+            //            commiter.filterAndCommit(Collections.singletonMap(0L,
+            // write.prepareCommit(true, 0)));
         }
 
         //        ReadBuilder readBuilder = table.newReadBuilder();

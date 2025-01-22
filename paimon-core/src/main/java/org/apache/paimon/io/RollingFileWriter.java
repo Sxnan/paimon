@@ -57,6 +57,7 @@ public class RollingFileWriter<T, R> implements FileWriter<T, List<R>> {
         this.targetFileSize = targetFileSize;
         this.results = new ArrayList<>();
         this.closedWriters = new ArrayList<>();
+        LOG.info("Initialize writer, targetFileSize: {}", targetFileSize);
     }
 
     @VisibleForTesting
