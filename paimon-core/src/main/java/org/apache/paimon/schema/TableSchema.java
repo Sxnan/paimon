@@ -189,7 +189,14 @@ public class TableSchema implements Serializable {
             if (columnGroupId == null) {
                 columnGroupId = currentColumnGroupId;
             }
-            newFields.add(dataField.newColumnGroupId(columnGroupId));
+
+            if (dataField.getColumnGroupId() != -1) {
+                // TODO: temporary solution to avoid the case that the field is reassigned with
+                // different id.
+                newFields.add(dataField);
+            } else {
+                newFields.add(dataField.newColumnGroupId(columnGroupId));
+            }
         }
 
         return newFields;
