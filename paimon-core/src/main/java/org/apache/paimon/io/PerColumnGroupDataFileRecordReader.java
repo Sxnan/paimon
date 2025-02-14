@@ -91,6 +91,8 @@ public class PerColumnGroupDataFileRecordReader
 
         FileRecordIterator<InternalRow> iterator = currentReader.readBatch();
         if (iterator == null) {
+            currentReader.close();
+            currentReader = null;
             return null;
         }
 
@@ -119,7 +121,10 @@ public class PerColumnGroupDataFileRecordReader
 
     @Override
     public void close() throws IOException {
-        currentReader.close();
+        if (currentReader != null) {
+            currentReader.close();
+            currentReader = null;
+        }
     }
 
     private Path toColumnGroupPath(int columnGroupId, Path path) {
@@ -133,17 +138,12 @@ public class PerColumnGroupDataFileRecordReader
 
     @Override
     public int nextColumnGroup() throws IOException {
-        currentReader.close();
+        if (currentReader != null) {
+            currentReader.close();
+            currentReader = null;
+        }
 
         currentColumnGroupId++;
-        FormatReaderFactory.Context context =
-                contextFactory.get(toColumnGroupPath(currentColumnGroupId, path));
-        currentReader =
-                bulkFormatMappingFactory
-                        .get(currentColumnGroupId)
-                        .getReaderFactory()
-                        .createReader(context);
-
         return currentColumnGroupId;
     }
 

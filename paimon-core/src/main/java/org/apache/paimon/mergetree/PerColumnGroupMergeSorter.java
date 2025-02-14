@@ -260,7 +260,6 @@ public class PerColumnGroupMergeSorter {
                                 if (next == null) {
                                     iterators.get(reader).releaseBatch();
                                     iterators.put(reader, null);
-                                    continue;
                                 } else {
                                     mergeFunctionWrapper.add(next);
                                     break;

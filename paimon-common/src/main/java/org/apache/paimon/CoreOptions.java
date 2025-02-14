@@ -1612,6 +1612,9 @@ public class CoreOptions implements Serializable {
                     .noDefaultValue()
                     .withDescription("The serialized refresh handler of materialized table.");
 
+    public static final ConfigOption<Boolean> ENABLE_COLUMN_GROUP =
+            key("column-group.enabled").booleanType().defaultValue(false);
+
     private final Options options;
 
     public CoreOptions(Map<String, String> options) {

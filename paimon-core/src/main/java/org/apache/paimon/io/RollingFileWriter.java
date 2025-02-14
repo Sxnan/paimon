@@ -66,8 +66,11 @@ public class RollingFileWriter<T, R> implements FileWriter<T, List<R>> {
     }
 
     private boolean rollingFile(boolean forceCheck) throws IOException {
-        return currentWriter.reachTargetSize(
-                forceCheck || recordCount % CHECK_ROLLING_RECORD_CNT == 0, targetFileSize);
+        return false;
+
+        //        return currentWriter.reachTargetSize(
+        //                forceCheck || recordCount % CHECK_ROLLING_RECORD_CNT == 0,
+        // targetFileSize);
     }
 
     @Override

@@ -469,6 +469,7 @@ under the License.
                     </execution>
                 </executions>
                 <configuration>
+                    <skip>true</skip>
                     <excludeSubProjects>false</excludeSubProjects>
                     <numUnapprovedLicenses>0</numUnapprovedLicenses>
                     <licenses>

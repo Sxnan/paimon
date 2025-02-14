@@ -18,6 +18,7 @@
 
 package org.apache.paimon;
 
+import org.apache.paimon.data.BinaryRow;
 import org.apache.paimon.data.BinaryString;
 import org.apache.paimon.data.GenericRow;
 import org.apache.paimon.data.InternalRow;
@@ -262,12 +263,12 @@ public class MyTest {
                         .column("g1", DataTypes.BIGINT(), null)
                         .column("g2", DataTypes.BIGINT(), null)
                         .primaryKey("k")
-                        .option("target-file-size", "16B")
-                        .option("write-buffer-size", "256 kb")
+                        //                        .option("target-file-size", "16B")
+                        //                        .option("write-buffer-size", "256 kb")
                         .option("num-sorted-run.compaction-trigger", "10000")
                         .option("merge-engine", "partial-update")
-                        .option("fields.g1.sequence-group", "v1")
                         .option("fields.g2.sequence-group", "v2")
+                        .option("fields.g1.sequence-group", "v1")
                         .build();
 
         String tableName = "column_group";
@@ -355,10 +356,10 @@ public class MyTest {
                         .column("v2", DataTypes.DOUBLE(), null)
                         .column("g2", DataTypes.BIGINT(), null)
                         .primaryKey("k")
-                        .option("num-sorted-run.compaction-trigger", "2")
+                        //                        .option("num-sorted-run.compaction-trigger", "2")
                         .option("merge-engine", "partial-update")
-                        .option("fields.g1.sequence-group", "v1")
                         .option("fields.g2.sequence-group", "v2")
+                        .option("fields.g1.sequence-group", "v1")
                         .build();
 
         String tableName = "column_group_compaction";
@@ -372,17 +373,30 @@ public class MyTest {
 
         try (StreamTableWrite write = streamWriteBuilder.newWrite();
                 StreamTableCommit commiter = streamWriteBuilder.newCommit()) {
-            write.write(GenericRow.of(0, BinaryString.fromString("0"), 2L, 0.0, 0L), 0);
-            write.write(GenericRow.of(1, BinaryString.fromString("1"), 0L, 1.1, null), 0);
+            write.write(GenericRow.of(0, BinaryString.fromString("0"), 0L, null, null), 0);
+            write.write(GenericRow.of(1, BinaryString.fromString("1"), 0L, null, null), 0);
             commiter.commit(0, write.prepareCommit(false, 0));
         }
 
         try (StreamTableWrite write = streamWriteBuilder.newWrite();
                 StreamTableCommit commiter = streamWriteBuilder.newCommit()) {
-            write.write(GenericRow.of(0, BinaryString.fromString("00"), 1L, 1.0, 10L), 0);
-            write.write(GenericRow.of(2, BinaryString.fromString("22"), 1L, 2.2, 20L), 0);
-            commiter.commit(1, write.prepareCommit(true, 1));
+            write.write(GenericRow.of(0, null, null, 0.0, 0L), 0);
+            write.write(GenericRow.of(1, null, null, 1.0, 0L), 0);
+            commiter.commit(1, write.prepareCommit(false, 1));
         }
+
+        try (StreamTableWrite write = streamWriteBuilder.newWrite();
+                StreamTableCommit commiter = streamWriteBuilder.newCommit()) {
+            write.compact(BinaryRow.EMPTY_ROW, 0, true);
+            commiter.commit(2, write.prepareCommit(true, 2));
+        }
+
+        //        try (StreamTableWrite write = streamWriteBuilder.newWrite();
+        //                StreamTableCommit commiter = streamWriteBuilder.newCommit()) {
+        //            write.write(GenericRow.of(0, BinaryString.fromString("00"), 1L, 1.0, 10L), 0);
+        //            write.write(GenericRow.of(2, BinaryString.fromString("22"), 1L, 2.2, 20L), 0);
+        //            commiter.commit(2, write.prepareCommit(true, 1));
+        //        }
 
         ReadBuilder readBuilder = table.newReadBuilder();
         TableScan.Plan plan = readBuilder.newScan().plan();

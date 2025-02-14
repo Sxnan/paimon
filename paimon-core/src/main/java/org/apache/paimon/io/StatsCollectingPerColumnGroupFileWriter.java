@@ -53,6 +53,7 @@ import static org.apache.paimon.io.DataFilePathFactory.dataFileToFileIndexPath;
 /** A {@link FileWriter} that collects statistics for each column group. */
 public class StatsCollectingPerColumnGroupFileWriter implements FileWriter<KeyValue, DataFileMeta> {
 
+    private final Path dataFilePath;
     private ColumnGroupKeyValueDataFileWriter writer;
 
     @Nullable private final SimpleStatsExtractor simpleStatsExtractor;
@@ -80,6 +81,7 @@ public class StatsCollectingPerColumnGroupFileWriter implements FileWriter<KeyVa
     private long minSeqNumber = Long.MAX_VALUE;
     private long maxSeqNumber = Long.MIN_VALUE;
     private long deleteRecordCount = 0;
+    private AbstractSingleFileWriter.AbortExecutor abortExecutor;
 
     public StatsCollectingPerColumnGroupFileWriter(
             int columnGroupId,
@@ -127,11 +129,12 @@ public class StatsCollectingPerColumnGroupFileWriter implements FileWriter<KeyVa
                 DataFileIndexWriter.create(
                         fileIO, dataFileToFileIndexPath(path), valueType, fileIndexOptions);
 
+        this.dataFilePath = toColumnGroupPath(columnGroupId, path);
         this.writer =
                 new ColumnGroupKeyValueDataFileWriter(
                         fileIO,
                         formatWriterFactoryFactory.get(keyType, valueType),
-                        toColumnGroupPath(columnGroupId, path),
+                        dataFilePath,
                         converterForColumnGroup(columnGroupId),
                         compression,
                         asyncWrite);
@@ -245,6 +248,8 @@ public class StatsCollectingPerColumnGroupFileWriter implements FileWriter<KeyVa
 
         try {
             writer.close();
+            abortExecutor = writer.abortExecutor();
+            writer = null;
         } catch (IOException e) {
             abort();
             throw e;
@@ -257,8 +262,9 @@ public class StatsCollectingPerColumnGroupFileWriter implements FileWriter<KeyVa
         Preconditions.checkState(closed, "Cannot access metric unless the writer is closed.");
 
         if (simpleStatsExtractor != null) {
-            List<SimpleColStats> colStats = new ArrayList<>();
-            colStats.addAll(Arrays.asList(simpleStatsExtractor.extract(fileIO, writer.path)));
+            List<SimpleColStats> colStats =
+                    new ArrayList<>(
+                            Arrays.asList(simpleStatsExtractor.extract(fileIO, dataFilePath)));
             return colStats.toArray(new SimpleColStats[0]);
         } else {
             return simpleStatsCollector.extract();
@@ -270,23 +276,19 @@ public class StatsCollectingPerColumnGroupFileWriter implements FileWriter<KeyVa
     }
 
     public AbortExecutor abortExecutor() {
-        List<SingleFileWriter.AbortExecutor> abortExecutors = new ArrayList<>();
-        abortExecutors.add(writer.abortExecutor());
-        return new AbortExecutor(abortExecutors.toArray(new SingleFileWriter.AbortExecutor[0]));
+        return new AbortExecutor(abortExecutor);
     }
 
     /** Abort executor to just have reference of path instead of whole writer. */
     public static class AbortExecutor {
-        private final SingleFileWriter.AbortExecutor[] abortExecutors;
+        private final SingleFileWriter.AbortExecutor abortExecutor;
 
-        private AbortExecutor(SingleFileWriter.AbortExecutor[] abortExecutors) {
-            this.abortExecutors = abortExecutors;
+        private AbortExecutor(SingleFileWriter.AbortExecutor abortExecutor) {
+            this.abortExecutor = abortExecutor;
         }
 
         public void abort() {
-            for (SingleFileWriter.AbortExecutor abortExecutor : abortExecutors) {
-                abortExecutor.abort();
-            }
+            abortExecutor.abort();
         }
     }
 

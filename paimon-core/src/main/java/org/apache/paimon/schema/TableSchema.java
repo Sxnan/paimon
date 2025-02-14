@@ -141,6 +141,10 @@ public class TableSchema implements Serializable {
     private List<DataField> maybeAssignColumnGroup(
             List<DataField> fields, Map<String, String> options) {
 
+        if (!Options.fromMap(options).get(CoreOptions.ENABLE_COLUMN_GROUP)) {
+            return fields;
+        }
+
         if (Options.fromMap(options).get(CoreOptions.MERGE_ENGINE)
                 != CoreOptions.MergeEngine.PARTIAL_UPDATE) {
             return fields;
